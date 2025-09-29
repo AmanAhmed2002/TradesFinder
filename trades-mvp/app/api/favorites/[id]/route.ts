@@ -1,4 +1,4 @@
-// app/api/favorites/[[...id]]/route.ts  (POST create, DELETE remove)
+// app/api/favorites/[id]/route.ts  (POST create, DELETE remove)
 export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";

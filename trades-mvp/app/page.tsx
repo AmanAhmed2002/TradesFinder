@@ -1,16 +1,30 @@
 // app/page.tsx
-import AppleMap from "../components/AppleMap";
-export default function Page() {
+"use client";
+
+import AppleMap from "@/components/AppleMap";
+
+export default function HomePage() {
   return (
-    <main className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-3xl font-bold">Trades Finder — GTA</h1>
-        <p className="text-neutral-400">
-          Search by trade and filter across the Greater Toronto Area. Save providers or send a quote request.
-        </p>
-      </header>
-      <AppleMap />
-    </main>
+    <div className="grid gap-6">
+      <section className="card card-hover">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="section-title">Find a Trade Service</h2>
+            <p className="mt-1 text-sm text-[--color-text-dim]">
+              Search Apple Maps data, then save providers you want to revisit later.
+            </p>
+          </div>
+          <div className="hidden md:flex items-center gap-2 text-sm text-[--color-text-dim]">
+            <span className="badge">Powered by Apple Maps</span>
+            <span className="badge">Tailwind v4</span>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <AppleMap />
+        </div>
+      </section>
+    </div>
   );
 }
 

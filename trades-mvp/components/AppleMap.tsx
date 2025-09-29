@@ -10,9 +10,26 @@ type Result = {
   phone?: string; website?: string; lat: number; lng: number; rating?: number;
   review_count?: number; source: "apple";
 };
+
 const TRADES = ["plumber","electrician","hvac","roofer","painter"] as const;
 const CITIES = ["Toronto","Mississauga","Brampton","Oakville","Burlington","Milton","Vaughan","Markham","Richmond Hill","Newmarket","Pickering","Ajax","Whitby","Oshawa","Clarington"] as const;
 const REGIONS = ["Toronto","Peel","York","Halton","Durham"] as const;
+
+/* Compact icons */
+function IconSearch(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M10 3a7 7 0 105.29 12.29l4.2 4.2 1.42-1.42-4.2-4.2A7 7 0 0010 3zm0 2a5 5 0 110 10A5 5 0 0110 5z"/>
+    </svg>
+  );
+}
+function IconBookmark(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M6 2h12a1 1 0 011 1v19l-7-4-7 4V3a1 1 0 011-1z"/>
+    </svg>
+  );
+}
 
 export default function AppleMap() {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -29,7 +46,8 @@ export default function AppleMap() {
 
   const [user, setUser] = useState<{id:string;email:string}|null>(null);
   const [authMode, setAuthMode] = useState<"login"|"register"|null>(null);
-  const [authEmail, setAuthEmail] = useState(""); const [authPw, setAuthPw] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPw, setAuthPw] = useState("");
 
   const initMapkit = useCallback(async () => {
     if (!window.mapkit) return;
@@ -47,7 +65,6 @@ export default function AppleMap() {
       isZoomEnabled: true,
     });
 
-    // GTA-wide region (center + span)
     const gta = new window.mapkit.CoordinateRegion(
       new window.mapkit.Coordinate(43.75, -79.5),
       new window.mapkit.CoordinateSpan(0.9, 1.6)
@@ -60,7 +77,6 @@ export default function AppleMap() {
   useEffect(() => { if (window.mapkit) initMapkit(); }, [initMapkit]);
 
   useEffect(() => {
-    // fetch current user
     fetch("/api/auth/me").then(r=>r.json()).then(d=>setUser(d.user || null)).catch(()=>{});
   }, []);
 
@@ -81,14 +97,12 @@ export default function AppleMap() {
       const items: Result[] = json.results;
 
       if (pageNum === 1) {
-        // clear pins
         if (map.annotations?.length) { try { map.removeAnnotations(map.annotations); } catch {} }
         setResults(items);
       } else {
         setResults(prev => [...prev, ...items]);
       }
 
-      // drop pins (append)
       const annotations = items.map((r) =>
         new window.mapkit.MarkerAnnotation(new window.mapkit.Coordinate(r.lat, r.lng), {
           title: r.name, subtitle: r.address || r.city || "",
@@ -131,72 +145,120 @@ export default function AppleMap() {
     <>
       <Script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js" strategy="afterInteractive" onLoad={initMapkit} />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <select className="rounded-xl bg-neutral-800 px-3 py-2" value={trade} onChange={(e)=>setTrade(e.target.value)}>
-          {TRADES.map(t=> <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select className="rounded-xl bg-neutral-800 px-3 py-2" value={city} onChange={(e)=>setCity(e.target.value)}>
-          <option value="">All GTA</option>
-          {CITIES.map(c=> <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select className="rounded-xl bg-neutral-800 px-3 py-2" value={region} onChange={(e)=>setRegion(e.target.value)}>
-          <option value="">All Regions</option>
-          {REGIONS.map(r=> <option key={r} value={r}>{r}</option>)}
-        </select>
-        <button onClick={doSearch} disabled={!ready || loading}
-          className="rounded-xl bg-sky-500 px-4 py-2 font-semibold text-neutral-900 disabled:opacity-50">
-          {loading ? "Searching..." : "Search"}
-        </button>
-        <div className="ml-auto flex items-center gap-2">
-          {user ? (
-            <>
-              <span className="text-sm text-neutral-400">Signed in as {user.email}</span>
-              <a className="rounded-xl bg-neutral-800 px-3 py-2 text-sm" href="#saves" onClick={(e)=>{e.preventDefault(); document.getElementById("saves")?.scrollIntoView({behavior:"smooth"});}}>My Saves</a>
-              <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm" onClick={async ()=>{
-                await fetch("/api/auth/logout", { method:"POST" }); setUser(null);
-              }}>Logout</button>
-            </>
-          ) : (
-            <>
-              <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm" onClick={()=>{setAuthMode("login");}}>Login</button>
-              <button className="rounded-xl bg-neutral-800 px-3 py-2 text-sm" onClick={()=>{setAuthMode("register");}}>Register</button>
-            </>
-          )}
-        </div>
-      </div>
+      {/* Controls: larger text, compact inputs, small icons */}
+      <section className="card card-hover">
+        <div className="flex flex-col gap-2 md:flex-row md:items-end">
+          <div className="grow">
+            <label className="mb-1 block text-[12px] font-medium muted">Trade</label>
+            <div className="relative">
+              <IconSearch className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 muted" />
+              <select className="input pl-8 text-[14px]" value={trade} onChange={(e)=>setTrade(e.target.value)}>
+                {TRADES.map(t=> <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <div ref={mapRef} className="h-[60vh] w-full rounded-2xl bg-neutral-800" />
+          <div className="grow">
+            <label className="mb-1 block text-[12px] font-medium muted">City</label>
+            <select className="input text-[14px]" value={city} onChange={(e)=>setCity(e.target.value)}>
+              <option value="">All GTA</option>
+              {CITIES.map(c=> <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <div className="grow">
+            <label className="mb-1 block text-[12px] font-medium muted">Region</label>
+            <select className="input text-[14px]" value={region} onChange={(e)=>setRegion(e.target.value)}>
+              <option value="">All Regions</option>
+              {REGIONS.map(r=> <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+
+          <button onClick={doSearch} disabled={!ready || loading} className="btn">
+            <IconSearch className="h-3.5 w-3.5" />
+            <span className="text-[14px]">{loading ? "Searching..." : "Search"}</span>
+          </button>
+
+          <div className="md:ml-auto flex items-center gap-2">
+            {user ? (
+              <>
+                <span className="badge">Signed in: {user.email}</span>
+                <a
+                  className="btn-ghost"
+                  href="#saves"
+                  onClick={(e)=>{e.preventDefault(); document.getElementById("saves")?.scrollIntoView({behavior:"smooth"});}}
+                >
+                  <IconBookmark className="h-3.5 w-3.5" />
+                  My Saves
+                </a>
+                <button
+                  className="btn-ghost"
+                  onClick={async ()=>{ await fetch("/api/auth/logout", { method:"POST" }); setUser(null); }}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn-ghost" onClick={()=>{setAuthMode("login");}}>Login</button>
+                <button className="btn" onClick={()=>{setAuthMode("register");}}>Register</button>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Map + Results */}
+      <div className="grid gap-4 lg:grid-cols-5">
+        {/* Map */}
+        <div className="lg:col-span-3">
+          <div ref={mapRef} className="h-[56vh] w-full rounded-md border border-[--color-border] bg-[--color-panel]" />
           {hasMore && (
-            <div className="mt-3">
-              <button onClick={loadMore} disabled={loading} className="rounded-xl bg-neutral-800 px-4 py-2">
+            <div className="mt-2">
+              <button onClick={loadMore} disabled={loading} className="btn-ghost text-[14px]">
                 {loading ? "Loading..." : "Load more"}
               </button>
             </div>
           )}
         </div>
 
-        <div className="lg:col-span-1">
-          <h2 className="mb-2 text-xl font-semibold">Results</h2>
-          <div className="space-y-3">
+        {/* Results list */}
+        <div className="lg:col-span-2">
+          <h2 className="title mb-1">Results</h2>
+          <div className="grid gap-2">
             {results.map((r) => (
-              <div key={r.id} className="rounded-2xl border border-neutral-800 p-3">
-                <div className="text-lg font-semibold">{r.name}</div>
-                {r.address && <div className="text-sm text-neutral-400">{r.address}</div>}
-                <div className="mt-2 flex gap-2">
-                  <button className="rounded-xl bg-neutral-800 px-3 py-1 text-sm" onClick={()=> saveProvider(r)}>
-                    Save
-                  </button>
-                  {r.website && (
-                    <a className="rounded-xl bg-neutral-800 px-3 py-1 text-sm" href={r.website} target="_blank" rel="noreferrer">
-                      Visit
-                    </a>
-                  )}
+              <div key={r.id} className="card card-hover">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[15px] font-semibold leading-tight">{r.name}</div>
+                    {r.address && <div className="mt-0.5 text-[12.5px] muted">{r.address}</div>}
+                    <div className="mt-1 grid gap-0.5 text-[13px]">
+                      {r.city && <div className="muted">City: <span className="text-[--color-text]">{r.city}</span></div>}
+                      {r.trade && <div className="muted">Trade: <span className="text-[--color-text]">{r.trade}</span></div>}
+                      {r.phone && <div className="muted">Phone: <span className="text-[--color-text]">{r.phone}</span></div>}
+                      {r.website && (
+                        <div className="truncate muted">
+                          Website:{" "}
+                          <a className="underline" href={r.website} target="_blank" rel="noreferrer">{r.website}</a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {r.website && (
+                      <a className="btn-ghost text-[13px]" href={r.website} target="_blank" rel="noreferrer">
+                        Visit
+                      </a>
+                    )}
+                    <button className="btn text-[13px]" onClick={()=> saveProvider(r)} title="Save provider">
+                      <IconBookmark className="h-3.5 w-3.5" />
+                      Save
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
-            {results.length === 0 && <div className="text-neutral-400">No results yet.</div>}
+            {results.length === 0 && <div className="card text-[14px]">No results yet.</div>}
           </div>
         </div>
       </div>
@@ -204,15 +266,24 @@ export default function AppleMap() {
       {/* Auth modal */}
       {authMode && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50">
-          <div className="w-full max-w-md rounded-2xl bg-neutral-900 p-4">
-            <h3 className="mb-2 text-lg font-semibold">{authMode === "login" ? "Login" : "Register"}</h3>
-            <input className="mb-2 w-full rounded-xl bg-neutral-800 px-3 py-2" placeholder="Email"
-                   value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} />
-            <input className="mb-3 w-full rounded-xl bg-neutral-800 px-3 py-2" placeholder="Password" type="password"
-                   value={authPw} onChange={(e)=>setAuthPw(e.target.value)} />
+          <div className="w-full max-w-md rounded-md border border-[--color-border] bg-[--color-panel] p-4 shadow-sm">
+            <h3 className="mb-2 text-[16px] font-semibold">{authMode === "login" ? "Login" : "Register"}</h3>
+            <input
+              className="input mb-2 text-[14px]"
+              placeholder="Email"
+              value={authEmail}
+              onChange={(e)=>setAuthEmail(e.target.value)}
+            />
+            <input
+              className="input mb-3 text-[14px]"
+              placeholder="Password"
+              type="password"
+              value={authPw}
+              onChange={(e)=>setAuthPw(e.target.value)}
+            />
             <div className="flex items-center justify-end gap-2">
-              <button className="rounded-xl bg-neutral-800 px-3 py-2" onClick={()=>setAuthMode(null)}>Cancel</button>
-              <button className="rounded-xl bg-sky-500 px-3 py-2 text-neutral-900" onClick={authSubmit}>
+              <button className="btn-ghost">Cancel</button>
+              <button className="btn" onClick={authSubmit}>
                 {authMode === "login" ? "Login" : "Create account"}
               </button>
             </div>
@@ -221,8 +292,8 @@ export default function AppleMap() {
       )}
 
       {/* My Saves */}
-      <div id="saves" className="mt-8">
-        <h2 className="mb-2 text-xl font-semibold">My Saves</h2>
+      <div id="saves" className="mt-6">
+        <h2 className="title mb-1">My Saves</h2>
         <MySaves />
       </div>
     </>
@@ -247,18 +318,39 @@ function MySaves() {
     await load();
   }
 
+  if (loading) return <div className="muted text-[14px]">Loading...</div>;
+  if (!items.length) return <div className="card text-[14px]">You haven’t saved any providers yet.</div>;
 
-  if (loading) return <div className="text-neutral-400">Loading...</div>;
-  if (!items.length) return <div className="text-neutral-400">No saved providers yet.</div>;
   return (
-    <div className="space-y-3">
+    <div className="grid gap-2">
       {items.map((r)=>(
-        <div key={r.id} className="rounded-2xl border border-neutral-800 p-3">
-          <div className="text-lg font-semibold">{r.name}</div>
-          {r.address && <div className="text-sm text-neutral-400">{r.address}</div>}
-          <div className="mt-2 flex gap-2">
-            {r.website && <a className="rounded-xl bg-neutral-800 px-3 py-1 text-sm" href={r.website} target="_blank">Visit</a>}
-            <button className="rounded-xl bg-neutral-800 px-3 py-1 text-sm" onClick={()=>remove(r.id)}>Remove</button>
+        <div key={r.id} className="card card-hover">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-semibold leading-tight">{r.name}</div>
+              {r.address && <div className="mt-0.5 text-[12.5px] muted">{r.address}</div>}
+              <div className="mt-1 grid gap-0.5 text-[13px]">
+                {r.city && <div className="muted">City: <span className="text-[--color-text]">{r.city}</span></div>}
+                {r.trade && <div className="muted">Trade: <span className="text-[--color-text]">{r.trade}</span></div>}
+                {r.phone && <div className="muted">Phone: <span className="text-[--color-text]">{r.phone}</span></div>}
+                {r.website && (
+                  <div className="truncate muted">
+                    Website:{" "}
+                    <a className="underline" href={r.website} target="_blank" rel="noreferrer">{r.website}</a>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {r.website && (
+                <a className="btn-ghost text-[13px]" href={r.website} target="_blank" rel="noreferrer">
+                  Visit
+                </a>
+              )}
+              <button className="btn-ghost text-[13px]" onClick={()=>remove(r.id)} title="Remove">
+                Remove
+              </button>
+            </div>
           </div>
         </div>
       ))}

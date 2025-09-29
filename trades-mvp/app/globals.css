@@ -1,13 +1,72 @@
 /* app/globals.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-/* optional: v4 CSS-first customization via @theme */
+/* Tailwind v4: define tokens with @theme */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-               Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-               "Noto Color Emoji", sans-serif;
-  --color-brand: #38bdf8;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji",
+               "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
+
+  /* Brand: deep purple accent */
+  --color-brand-50:  oklch(0.96 0.02 310);
+  --color-brand-300: oklch(0.78 0.10 310);
+  --color-brand-500: oklch(0.68 0.16 310);
+  --color-brand-600: oklch(0.62 0.18 310);
+  --color-brand-700: oklch(0.56 0.16 310);
+
+  /* Neutral/dark */
+  --color-surface-50:  #0b0c10;
+  --color-surface-100: #101219;
+  --color-surface-200: #151928;
+  --color-surface-300: #1c2132;
+  --color-surface-400: #262c41;
+
+  --color-bg: var(--color-surface-50);
+  --color-panel: var(--color-surface-100);
+  --color-panel-hover: var(--color-surface-200);
+  --color-border: var(--color-surface-300);
+  --color-text: oklch(0.87 0.02 270);
+  --color-text-dim: oklch(0.76 0.02 270);
+  --color-ring: var(--color-brand-500);
+}
+
+:root { color-scheme: dark; }
+html { font-family: var(--font-sans); }
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Compact, TTC-esque density + crisp borders/rounding */
+@layer components {
+  .container-app { @apply mx-auto max-w-6xl px-4 py-5; }
+
+  .card {
+    /* Use rounded-lg (not 2xl) to avoid your validator error and to be crisper */
+    @apply rounded-lg border border-[--color-border] bg-[--color-panel] p-4 shadow-sm;
+  }
+  .card-hover { @apply transition-colors hover:bg-[--color-panel-hover]; }
+
+  .btn {
+    @apply inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white
+           hover:bg-brand-500 active:bg-brand-700;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-1.5 rounded-md border border-[--color-border] bg-transparent px-3 py-2
+           text-sm text-[--color-text] hover:bg-[--color-panel-hover];
+  }
+
+  .input {
+    @apply w-full rounded-md border border-[--color-border] bg-[--color-panel] px-3 py-2 text-sm
+           placeholder:[color:var(--color-text-dim)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--color-ring];
+  }
+
+  .badge { @apply inline-flex items-center rounded-md bg-[--color-surface-200] px-2 py-1 text-xs text-[--color-text-dim]; }
+  .title { @apply text-[18px] font-semibold; }
+  .subtitle { @apply text-[13px] text-[--color-text-dim]; }
+  .section { @apply grid gap-3; }
+  .muted { color: var(--color-text-dim); }
 }
 

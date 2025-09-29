@@ -243,9 +243,10 @@ function MySaves() {
   useEffect(()=>{ load(); }, []);
 
   async function remove(id: string) {
-    await fetch(`/api/favorites/${id}`, { method:"DELETE" });
+    await fetch(`/api/favorites?provider_id=${encodeURIComponent(id)}`, { method: "DELETE" });
     await load();
   }
+
 
   if (loading) return <div className="text-neutral-400">Loading...</div>;
   if (!items.length) return <div className="text-neutral-400">No saved providers yet.</div>;

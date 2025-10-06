@@ -136,10 +136,23 @@ export default function AppleMap() {
     const r = await fetch(route, { method: "POST", headers: { "Content-Type": "application/json" }, body });
     const j = await r.json();
     if (!j.ok) { alert(j.error || "Auth failed"); return; }
-    setAuthMode(null); setAuthEmail(""); setAuthPw("");
+
+    if (authMode === "register" && j.requireVerification) {
+      alert("Please verify your email. We sent you a link to complete registration.");
+      setAuthMode(null);
+      setAuthEmail("");
+      setAuthPw("");
+      return; // do not fetch /api/auth/me; they are not logged in yet
+    }
+
+    // login path as before
+    setAuthMode(null);
+    setAuthEmail("");
+    setAuthPw("");
     const me = await fetch("/api/auth/me").then(r=>r.json());
     setUser(me.user || null);
   }
+
 
   return (
     <>

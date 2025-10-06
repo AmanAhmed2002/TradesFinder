@@ -1,43 +1,48 @@
+// app/api/auth/register/route.ts
 export const runtime = "nodejs";
 import { NextResponse } from "next/server";
-import crypto from "crypto";
-import { createUser, getUserByEmail, createSession } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { mailer } from "@/lib/mail";
+import { getUserByEmail, createUser, createVerificationToken } from "@/lib/auth";
+import { sendVerificationEmail } from "@/lib/mail";
+
+function baseUrlFrom(req: Request) {
+  const h = new Headers(req.headers);
+  const origin = h.get("origin") || process.env.APP_URL || "";
+  return origin.replace(/\/+$/, "");
+}
 
 export async function POST(req: Request) {
   try {
     const { email, password } = await req.json();
-    if (!email || !password) return NextResponse.json({ ok:false, error:"Missing fields" }, { status:400 });
+    if (!email || !password) {
+      const r = NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
+      r.headers.set("Cache-Control", "no-store");
+      return r;
+    }
 
-    const exists = await getUserByEmail(email);
-    if (exists) return NextResponse.json({ ok:false, error:"Email already registered" }, { status:409 });
+    const existing = await getUserByEmail(email);
+    if (existing) {
+      const r = NextResponse.json({ ok: false, error: "Email already registered" }, { status: 409 });
+      r.headers.set("Cache-Control", "no-store");
+      return r;
+    }
 
     const u = await createUser(email, password);
 
-    // Optional email verify (send but don't block login)
-    const token = crypto.randomBytes(24).toString("hex");
-    const expires = new Date(Date.now()+864e5).toISOString();
-    await db.execute({
-      sql:`INSERT INTO email_tokens (id,user_id,type,token,expires_at) VALUES (?,?,?,?,?)`,
-      args:[crypto.randomUUID(), u.id, "verify", token, expires],
-    });
-    const link = `${process.env.APP_BASE_URL}/api/auth/verify?token=${token}`;
-    try {
-      await mailer.sendMail({
-        from: process.env.SMTP_USER!,
-        to: u.email,
-        subject: "Verify your Trades Finder account",
-        text: `Click to verify: ${link}`,
-      });
-    } catch (err) {
-      console.error("[SMTP verify] send failed:", err);
-    }
+    const { token } = await createVerificationToken(u.id, u.email);
+    const verifyUrl = `${baseUrlFrom(req)}/api/auth/verify?token=${encodeURIComponent(token)}`;
+    await sendVerificationEmail(u.email, verifyUrl); // Nodemailer sendMail flow. :contentReference[oaicite:0]{index=0}
 
-    await createSession(u.id);
-    return NextResponse.json({ ok:true });
-  } catch (e:any) {
-    return NextResponse.json({ ok:false, error:String(e?.message||e) }, { status:500 });
+    // Do NOT create session yet — must verify first.
+    const r = NextResponse.json(
+      { ok: true, requireVerification: true, message: "Please verify your email to complete registration." },
+      { status: 200 }
+    );
+    r.headers.set("Cache-Control", "no-store");
+    return r;
+  } catch (e: any) {
+    const r = NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
+    r.headers.set("Cache-Control", "no-store");
+    return r;
   }
 }
 

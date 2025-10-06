@@ -1,17 +1,18 @@
-//app/api/auth/logout/route.ts
+// app/api/auth/logout/route.ts
 export const runtime = "nodejs";
-
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { cookies } from "next/headers";
+import { deleteCurrentSession } from "@/lib/auth";
 
 export async function POST() {
-  const store = await cookies();                // ✅ Next 15: await cookies()
-  const sid = store.get("sid")?.value;
-  if (sid) {
-    await db.execute({ sql: `DELETE FROM sessions WHERE id = ?`, args: [sid] });
-    store.delete("sid");                        // ✅ delete via awaited store
+  try {
+    await deleteCurrentSession();
+    const res = NextResponse.json({ ok: true }, { status: 200 });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
+  } catch (e: any) {
+    const res = NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
   }
-  return NextResponse.json({ ok: true });
 }
 

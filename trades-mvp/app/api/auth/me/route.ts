@@ -1,10 +1,18 @@
+// app/api/auth/me/route.ts
 export const runtime = "nodejs";
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { getUserFromSession } from "@/lib/auth";
 
 export async function GET() {
-  const u = await requireUser();
-  if (!u) return NextResponse.json({ ok:false, user:null }, { status:200 });
-  return NextResponse.json({ ok:true, user: { id: u.id, email: u.email } });
+  try {
+    const u = await getUserFromSession();
+    const res = NextResponse.json({ ok: true, user: u ? { id: u.id, email: u.email } : null }, { status: 200 });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
+  } catch (e: any) {
+    const res = NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
+  }
 }
 

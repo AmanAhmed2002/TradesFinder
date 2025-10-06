@@ -142,17 +142,15 @@ export default function AppleMap() {
       setAuthMode(null);
       setAuthEmail("");
       setAuthPw("");
-      return; // do not fetch /api/auth/me; they are not logged in yet
+      return;
     }
 
-    // login path as before
     setAuthMode(null);
     setAuthEmail("");
     setAuthPw("");
     const me = await fetch("/api/auth/me").then(r=>r.json());
     setUser(me.user || null);
   }
-
 
   return (
     <>
@@ -276,11 +274,17 @@ export default function AppleMap() {
         </div>
       </div>
 
-      {/* Auth modal */}
+      {/* Auth modal — ONLY STYLING CHANGED: solid dark panel + darker/blurred backdrop */}
       {authMode && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50">
-          <div className="w-full max-w-md rounded-md border border-[--color-border] bg-[--color-panel] p-4 shadow-sm">
-            <h3 className="mb-2 text-[16px] font-semibold">{authMode === "login" ? "Login" : "Register"}</h3>
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-sm"
+          aria-modal="true"
+          role="dialog"
+        >
+          <div className="w-full max-w-md rounded-md border border-[--color-border] bg-[--color-panel] p-4 shadow-lg">
+            <h3 className="mb-2 text-[16px] font-semibold">
+              {authMode === "login" ? "Login" : "Register"}
+            </h3>
             <input
               className="input mb-2 text-[14px]"
               placeholder="Email"
@@ -295,7 +299,7 @@ export default function AppleMap() {
               onChange={(e)=>setAuthPw(e.target.value)}
             />
             <div className="flex items-center justify-end gap-2">
-              <button className="btn-ghost">Cancel</button>
+              <button className="btn-ghost" onClick={()=>setAuthMode(null)}>Cancel</button>
               <button className="btn" onClick={authSubmit}>
                 {authMode === "login" ? "Login" : "Create account"}
               </button>

@@ -1,12 +1,15 @@
 // app/api/auth/register/route.ts
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextResponse } from "next/server";
 import { getUserByEmail, createUser, createVerificationToken } from "@/lib/auth";
 import { sendVerificationEmail } from "@/lib/mail";
 
 function baseUrlFrom(req: Request) {
   const h = new Headers(req.headers);
-  const origin = h.get("origin") || process.env.APP_URL || "";
+  const origin = h.get("origin") || process.env.APP_BASE_URL || "";
   return origin.replace(/\/+$/, "");
 }
 
@@ -27,12 +30,10 @@ export async function POST(req: Request) {
     }
 
     const u = await createUser(email, password);
-
     const { token } = await createVerificationToken(u.id, u.email);
     const verifyUrl = `${baseUrlFrom(req)}/api/auth/verify?token=${encodeURIComponent(token)}`;
-    await sendVerificationEmail(u.email, verifyUrl); // Nodemailer sendMail flow. :contentReference[oaicite:0]{index=0}
+    await sendVerificationEmail(u.email, verifyUrl);
 
-    // Do NOT create session yet — must verify first.
     const r = NextResponse.json(
       { ok: true, requireVerification: true, message: "Please verify your email to complete registration." },
       { status: 200 }
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
     r.headers.set("Cache-Control", "no-store");
     return r;
   } catch (e: any) {
+    console.error("register error:", e);
     const r = NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
     r.headers.set("Cache-Control", "no-store");
     return r;

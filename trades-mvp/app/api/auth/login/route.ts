@@ -1,5 +1,8 @@
 // app/api/auth/login/route.ts
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextResponse } from "next/server";
 import { getUserByEmail, verifyPassword, createSession } from "@/lib/auth";
 
@@ -19,7 +22,7 @@ export async function POST(req: Request) {
       return res;
     }
 
-    // Require verification via email_verified_at
+    // Require verification if your schema has email_verified_at
     if (Object.prototype.hasOwnProperty.call(u, "email_verified_at") && !u.email_verified_at) {
       const res = NextResponse.json(
         { ok: false, error: "Please verify your email before logging in." },
@@ -41,6 +44,8 @@ export async function POST(req: Request) {
     res.headers.set("Cache-Control", "no-store");
     return res;
   } catch (e: any) {
+    // This will show in Vercel Function Logs for the deployment
+    console.error("login error:", e);
     const res = NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
     res.headers.set("Cache-Control", "no-store");
     return res;

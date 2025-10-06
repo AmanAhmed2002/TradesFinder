@@ -1,59 +1,53 @@
 // lib/mapkitToken.ts
-import jwt from "jsonwebtoken";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { sign } from "jsonwebtoken";
 
-// Normalize PEM newlines
-function normalizePem(pem?: string) {
-  if (!pem) return pem;
-  return pem.replace(/\\n/g, "\n");
-}
+// Apple credentials (unchanged)
+const TEAM_ID = process.env.MAPKIT_TEAM_ID || process.env.APPLE_TEAM_ID;
+const KEY_ID = process.env.MAPKIT_KEY_ID || process.env.APPLE_MAPKIT_KEY_ID;
+const PRIVATE_KEY_PATH = process.env.MAPKIT_PRIVATE_KEY_PATH || "keys/AuthKey_MapKit.p8";
 
-function assertEnvs() {
-  const teamId = process.env.MAPKIT_TEAM_ID;
-  const keyId = process.env.MAPKIT_KEY_ID;
-  const pemRaw = process.env.MAPKIT_PRIVATE_KEY;
-  const pem = normalizePem(pemRaw);
+// Allowed origins (keep your existing comma-separated list, incl. localhost + Vercel)
+const ORIGINS = (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-  if (!teamId) throw new Error("Missing MAPKIT_TEAM_ID");
-  if (!keyId) throw new Error("Missing MAPKIT_KEY_ID");
-  if (!pem) throw new Error("Missing MAPKIT_PRIVATE_KEY");
-  if (!pem.includes("BEGIN PRIVATE KEY")) throw new Error("MAPKIT_PRIVATE_KEY is not a PEM");
+// Load the private key once
+const PRIVATE_KEY = readFileSync(resolve(process.cwd(), PRIVATE_KEY_PATH), "utf8");
 
-  return { teamId, keyId, pem };
-}
-
-/** Shared signer for ES256 with kid header */
-function sign(payload: Record<string, any>) {
-  const { teamId, keyId, pem } = assertEnvs();
+/**
+ * Mint a short-lived MapKit JS token.
+ * Required claims: iss, iat, exp; recommended: origin (comma-separated for multiple sites).
+ * Must be signed with ES256 and include the key id (kid).  :contentReference[oaicite:2]{index=2}
+ */
+export function mintMapkitToken(): string {
+  if (!TEAM_ID || !KEY_ID) {
+    throw new Error("Missing MAPKIT_TEAM_ID/KEY_ID environment variables.");
+  }
 
   const now = Math.floor(Date.now() / 1000);
-  const base = {
-    iss: teamId,
+  const exp = now + 60 * 20; // 20 minutes, common practice for MapKit tokens
+
+  // Payload must be an object
+  const payload = {
+    iss: TEAM_ID,
     iat: now,
-    exp: now + 60 * 5, // 5 min; safe for both JS and server tokens
-    ...payload,
+    exp,
+    origin: ORIGINS.join(","), // multiple origins are supported as a single CSV string. :contentReference[oaicite:3]{index=3}
   };
 
-  // IMPORTANT: ES256 and kid header
-  return jwt.sign(base, pem, {
+  // IMPORTANT: Do NOT pass a custom `header` object here.
+  // jsonwebtoken sets `alg` from `algorithm` and `kid` from `keyid` automatically. :contentReference[oaicite:4]{index=4}
+  const token = sign(payload, PRIVATE_KEY, {
     algorithm: "ES256",
-    keyid: keyId,
-    header: { typ: "JWT" },
+    keyid: KEY_ID,
   });
+
+  return token;
 }
 
-/** Token for MapKit JS (browser). If origin not provided, omit the claim. */
-export function makeJsToken(origin?: string) {
-  if (origin) return sign({ origin });
-  return sign({});
-}
-
-/** Token for Apple Maps Server API (no origin claim) */
-export function makeServerToken() {
-  return sign({});
-}
-
-/** Optional: decode locally to verify header/payload during debugging (not sent to Apple) */
-export function debugDecode(token: string) {
-  return jwt.decode(token, { complete: true });
-}
+// Optional default export to avoid breaking existing imports
+export default mintMapkitToken;
 

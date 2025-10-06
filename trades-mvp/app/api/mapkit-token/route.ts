@@ -1,66 +1,66 @@
 // app/api/mapkit-token/route.ts
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic"; // avoid static optimization for this route
+export const revalidate = 0;
+
 import { NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { sign } from "jsonwebtoken";
 
-/**
- * Env you must set in Vercel:
- * - APPLE_TEAM_ID
- * - APPLE_MAPKIT_KEY_ID
- * - MAPKIT_PRIVATE_KEY_PATH (path inside the repo or a mounted secret file)
- * - MAPKIT_ALLOWED_ORIGINS (comma-separated list: http://localhost:3000,https://your-app.vercel.app,https://www.yourdomain.com)
- */
+/** Allowed origins (comma-separated, include protocol, no trailing slash) */
+function allowedOrigins(): string[] {
+  return (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
 
-const TEAM_ID = process.env.APPLE_TEAM_ID!;
-const KEY_ID = process.env.APPLE_MAPKIT_KEY_ID!;
-const PRIVATE_KEY_PATH = process.env.MAPKIT_PRIVATE_KEY_PATH || "keys/AuthKey_MapKit.p8";
+function isAllowed(origin: string | null) {
+  const list = allowedOrigins();
+  return !!origin && list.includes(origin);
+}
 
-const ORIGINS = (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+/** Load Apple MapKit credentials/key at request time (never at module load). */
+function getAppleCreds() {
+  const TEAM_ID = process.env.MAPKIT_TEAM_ID || process.env.APPLE_TEAM_ID;
+  const KEY_ID  = process.env.MAPKIT_KEY_ID  || process.env.APPLE_MAPKIT_KEY_ID;
 
-const PRIVATE_KEY = readFileSync(resolve(process.cwd(), PRIVATE_KEY_PATH), "utf8");
+  // Prefer secret in env: MAPKIT_PRIVATE_KEY (raw with \n or base64)
+  const envKey = process.env.MAPKIT_PRIVATE_KEY || process.env.MAPKIT_PRIVATE_KEY_BASE64 || "";
+  let PRIVATE_KEY = envKey;
 
-function isAllowedOrigin(origin: string | null) {
-  if (!origin) return false;
-  return ORIGINS.includes(origin);
+  // If it's base64, decode; if it has literal "\n", fix line breaks.
+  if (PRIVATE_KEY && !PRIVATE_KEY.includes("BEGIN PRIVATE KEY")) {
+    try { PRIVATE_KEY = Buffer.from(PRIVATE_KEY, "base64").toString("utf8"); } catch {}
+  }
+  if (PRIVATE_KEY.includes("\\n")) PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, "\n");
+
+  if (!TEAM_ID || !KEY_ID || !PRIVATE_KEY) {
+    throw new Error("Missing MAPKIT_TEAM_ID/KEY_ID or MAPKIT_PRIVATE_KEY env.");
+  }
+  return { TEAM_ID, KEY_ID, PRIVATE_KEY };
 }
 
 export async function GET(req: Request) {
   try {
     const origin = req.headers.get("origin");
-    if (!isAllowedOrigin(origin)) {
+    if (!isAllowed(origin)) {
       return NextResponse.json({ ok: false, error: "Origin not allowed" }, { status: 403 });
     }
+
+    const { TEAM_ID, KEY_ID, PRIVATE_KEY } = getAppleCreds();
 
     const now = Math.floor(Date.now() / 1000);
     const exp = now + 60 * 20; // 20 minutes
 
-    // Sign a MapKit JS token. Include all allowed origins so a single token works for dev + prod.
-    // Apple docs cover token creation and origin matching. :contentReference[oaicite:3]{index=3}
-    const token = jwt.sign(
-      {
-        iss: TEAM_ID,
-        iat: now,
-        exp,
-        origin: ORIGINS.join(","), // multiple origins supported
-      },
+    const token = sign(
+      { iss: TEAM_ID, iat: now, exp, origin: allowedOrigins().join(",") },
       PRIVATE_KEY,
-      {
-        algorithm: "ES256",
-        keyid: KEY_ID, // a.k.a. 'kid'
-      }
+      { algorithm: "ES256", keyid: KEY_ID }
     );
 
     return new NextResponse(token, {
       status: 200,
-      headers: {
-        "Content-Type": "text/plain",
-        "Cache-Control": "no-store",
-      },
+      headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" },
     });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });

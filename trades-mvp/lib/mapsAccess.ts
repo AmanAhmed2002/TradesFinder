@@ -1,53 +1,44 @@
 // lib/mapsAccess.ts
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { sign } from "jsonwebtoken";
 
-// Support either env naming you may have used elsewhere
-const TEAM_ID = process.env.MAPKIT_TEAM_ID || process.env.APPLE_TEAM_ID;
-const KEY_ID = process.env.MAPKIT_KEY_ID || process.env.APPLE_MAPKIT_KEY_ID;
-const PRIVATE_KEY_PATH = process.env.MAPKIT_PRIVATE_KEY_PATH || "keys/AuthKey_MapKit.p8";
+function allowedOrigins(): string[] {
+  return (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
 
-// Comma-separated list of allowed origins (keep localhost + Vercel + any custom domains)
-const ORIGINS = (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+function getAppleCreds() {
+  const TEAM_ID = process.env.MAPKIT_TEAM_ID || process.env.APPLE_TEAM_ID;
+  const KEY_ID  = process.env.MAPKIT_KEY_ID  || process.env.APPLE_MAPKIT_KEY_ID;
+  let PRIVATE_KEY = process.env.MAPKIT_PRIVATE_KEY || process.env.MAPKIT_PRIVATE_KEY_BASE64 || "";
 
-// Load the PEM once
-const PRIVATE_KEY = readFileSync(resolve(process.cwd(), PRIVATE_KEY_PATH), "utf8");
+  if (PRIVATE_KEY && !PRIVATE_KEY.includes("BEGIN PRIVATE KEY")) {
+    try { PRIVATE_KEY = Buffer.from(PRIVATE_KEY, "base64").toString("utf8"); } catch {}
+  }
+  if (PRIVATE_KEY.includes("\\n")) PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, "\n");
 
-/**
- * Mint a short-lived MapKit JS token (ES256).
- * Required claims: iss, iat, exp. Recommended: origin (CSV for multiple sites).
- * jsonwebtoken sets header.alg and header.kid from the options; no custom header is needed.
- * Apple MapKit JS requires ES256 and the claims above. (See Apple docs.) 
- */
+  if (!TEAM_ID || !KEY_ID || !PRIVATE_KEY) {
+    throw new Error("Missing MAPKIT_TEAM_ID/KEY_ID or MAPKIT_PRIVATE_KEY env.");
+  }
+  return { TEAM_ID, KEY_ID, PRIVATE_KEY };
+}
+
 export function makeServerToken(): string {
-  if (!TEAM_ID || !KEY_ID) throw new Error("Missing MAPKIT_TEAM_ID/KEY_ID envs.");
-
+  const { TEAM_ID, KEY_ID, PRIVATE_KEY } = getAppleCreds();
   const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + 60 * 20; // 20 minutes
+  const exp = iat + 60 * 20;
 
-  const payload = {
-    iss: TEAM_ID,
-    iat,
-    exp,
-    origin: ORIGINS.join(","), // multiple origins via CSV
-  };
-
-  // Do NOT pass a custom `header` — ES256 and kid are derived from these options.
-  return sign(payload, PRIVATE_KEY, {
-    algorithm: "ES256",
-    keyid: KEY_ID,
-  });
+  return sign(
+    { iss: TEAM_ID, iat, exp, origin: allowedOrigins().join(",") },
+    PRIVATE_KEY,
+    { algorithm: "ES256", keyid: KEY_ID }
+  );
 }
 
-// ✅ Alias exported for existing callers (e.g. /app/api/places/route.ts)
-export function getAccessToken(): string {
-  return makeServerToken();
-}
+// Keep existing name used by /app/api/places/route.ts
+export function getAccessToken(): string { return makeServerToken(); }
 
-// Keep default export if other files import it that way
+// Default export if any caller used it
 export default makeServerToken;
 

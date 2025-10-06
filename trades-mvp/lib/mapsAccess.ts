@@ -20,7 +20,8 @@ const PRIVATE_KEY = readFileSync(resolve(process.cwd(), PRIVATE_KEY_PATH), "utf8
 /**
  * Mint a short-lived MapKit JS token (ES256).
  * Required claims: iss, iat, exp. Recommended: origin (CSV for multiple sites).
- * jsonwebtoken sets header.alg and header.kid from the options, so no custom header is needed.
+ * jsonwebtoken sets header.alg and header.kid from the options; no custom header is needed.
+ * Apple MapKit JS requires ES256 and the claims above. (See Apple docs.) 
  */
 export function makeServerToken(): string {
   if (!TEAM_ID || !KEY_ID) throw new Error("Missing MAPKIT_TEAM_ID/KEY_ID envs.");
@@ -35,13 +36,18 @@ export function makeServerToken(): string {
     origin: ORIGINS.join(","), // multiple origins via CSV
   };
 
-  // DO NOT pass a custom `header` — it triggers TS overload issues and is unnecessary.
+  // Do NOT pass a custom `header` — ES256 and kid are derived from these options.
   return sign(payload, PRIVATE_KEY, {
     algorithm: "ES256",
     keyid: KEY_ID,
   });
 }
 
-// Keep a default export if other files import it that way
+// ✅ Alias exported for existing callers (e.g. /app/api/places/route.ts)
+export function getAccessToken(): string {
+  return makeServerToken();
+}
+
+// Keep default export if other files import it that way
 export default makeServerToken;
 

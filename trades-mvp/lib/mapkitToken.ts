@@ -1,47 +1,73 @@
 // lib/mapkitToken.ts
-import { sign } from "jsonwebtoken";
+import { SignJWT, importPKCS8 } from 'jose';
 
-/** Resolve allowed origins once per call */
-function allowedOrigins(): string[] {
-  return (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
-    .split(",")
+/**
+ * Normalizes PEM that may be stored with \n escapes in env.
+ */
+function normalizePem(pem: string) {
+  return pem.includes('\\n') ? pem.replace(/\\n/g, '\n') : pem;
+}
+
+const TEAM_ID = process.env.MAPKIT_TEAM_ID!;
+const KEY_ID = process.env.MAPKIT_KEY_ID!;
+const RAW_PEM = process.env.MAPKIT_PRIVATE_KEY!;
+
+if (!TEAM_ID) throw new Error('Missing MAPKIT_TEAM_ID');
+if (!KEY_ID) throw new Error('Missing MAPKIT_KEY_ID');
+if (!RAW_PEM) throw new Error('Missing MAPKIT_PRIVATE_KEY');
+
+async function importKeyES256() {
+  // Apple MapKit requires ES256 (EC P-256)
+  // jose.importPKCS8 expects full PKCS#8 PEM string
+  const pem = normalizePem(RAW_PEM);
+  return importPKCS8(pem, 'ES256');
+}
+
+/**
+ * Create a short-lived token for MapKit **JS** usage.
+ * We include an origin restriction (recommended) using a comma-separated string.
+ * Note: Apple sources/documentation show ES256 and optional origin restriction.
+ */
+export async function createJsMapsToken(): Promise<string> {
+  const allowed = (process.env.MAPKIT_ALLOWED_ORIGINS || '')
+    .split(',')
     .map(s => s.trim())
     .filter(Boolean);
-}
 
-/** Load credentials/key from env at call time. */
-function getAppleCreds() {
-  const TEAM_ID = process.env.MAPKIT_TEAM_ID || process.env.APPLE_TEAM_ID;
-  const KEY_ID  = process.env.MAPKIT_KEY_ID  || process.env.APPLE_MAPKIT_KEY_ID;
-
-  let PRIVATE_KEY = process.env.MAPKIT_PRIVATE_KEY || process.env.MAPKIT_PRIVATE_KEY_BASE64 || "";
-
-  if (PRIVATE_KEY && !PRIVATE_KEY.includes("BEGIN PRIVATE KEY")) {
-    try { PRIVATE_KEY = Buffer.from(PRIVATE_KEY, "base64").toString("utf8"); } catch {}
+  if (allowed.length === 0) {
+    throw new Error('MAPKIT_ALLOWED_ORIGINS is empty');
   }
-  if (PRIVATE_KEY.includes("\\n")) PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, "\n");
 
-  if (!TEAM_ID || !KEY_ID || !PRIVATE_KEY) {
-    throw new Error("Missing MAPKIT_TEAM_ID/KEY_ID or MAPKIT_PRIVATE_KEY env.");
-  }
-  return { TEAM_ID, KEY_ID, PRIVATE_KEY };
-}
-
-export function mintMapkitToken(): string {
-  const { TEAM_ID, KEY_ID, PRIVATE_KEY } = getAppleCreds();
-
+  const privateKey = await importKeyES256();
   const now = Math.floor(Date.now() / 1000);
-  const exp = now + 60 * 20;
 
-  return sign(
-    { iss: TEAM_ID, iat: now, exp, origin: allowedOrigins().join(",") },
-    PRIVATE_KEY,
-    { algorithm: "ES256", keyid: KEY_ID }
-  );
+  // Per Apple guidance: ES256 + iss/teamId; origin restriction recommended for JS
+  // Many implementations use a single "origin" claim with comma-separated origins.
+  const token = await new SignJWT({ origin: allowed.join(',') })
+    .setProtectedHeader({ alg: 'ES256', kid: KEY_ID, typ: 'JWT' })
+    .setIssuer(TEAM_ID)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 60 * 60) // 1 hour
+    .sign(privateKey);
+
+  return token;
 }
 
-// Backward-compat named alias for callers expecting this name
-export function makeServerToken(): string { return mintMapkitToken(); }
+/**
+ * Create a token for **server-to-server** Maps Server API calls.
+ * No origin restriction needed here.
+ */
+export async function createServerMapsToken(): Promise<string> {
+  const privateKey = await importKeyES256();
+  const now = Math.floor(Date.now() / 1000);
 
-export default mintMapkitToken;
+  const token = await new SignJWT({})
+    .setProtectedHeader({ alg: 'ES256', kid: KEY_ID, typ: 'JWT' })
+    .setIssuer(TEAM_ID)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 60 * 60) // 1 hour
+    .sign(privateKey);
+
+  return token;
+}
 

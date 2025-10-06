@@ -1,44 +1,40 @@
 // lib/mapsAccess.ts
-import { sign } from "jsonwebtoken";
+import { createServerMapsToken } from '@/lib/mapkitToken';
 
-function allowedOrigins(): string[] {
-  return (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
-    .split(",")
-    .map(s => s.trim())
-    .filter(Boolean);
-}
+const MAPS_API_BASE = 'https://maps-api.apple.com';
 
-function getAppleCreds() {
-  const TEAM_ID = process.env.MAPKIT_TEAM_ID || process.env.APPLE_TEAM_ID;
-  const KEY_ID  = process.env.MAPKIT_KEY_ID  || process.env.APPLE_MAPKIT_KEY_ID;
-  let PRIVATE_KEY = process.env.MAPKIT_PRIVATE_KEY || process.env.MAPKIT_PRIVATE_KEY_BASE64 || "";
+type AppleSearchResponse = unknown; // keep flexible; your route will just pass through JSON
 
-  if (PRIVATE_KEY && !PRIVATE_KEY.includes("BEGIN PRIVATE KEY")) {
-    try { PRIVATE_KEY = Buffer.from(PRIVATE_KEY, "base64").toString("utf8"); } catch {}
+export async function appleSearch(q: string, near?: string): Promise<AppleSearchResponse> {
+  if (!q || !q.trim()) {
+    throw new Error('Missing query');
   }
-  if (PRIVATE_KEY.includes("\\n")) PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, "\n");
 
-  if (!TEAM_ID || !KEY_ID || !PRIVATE_KEY) {
-    throw new Error("Missing MAPKIT_TEAM_ID/KEY_ID or MAPKIT_PRIVATE_KEY env.");
+  const token = await createServerMapsToken();
+  const params = new URLSearchParams({ q: q.trim() });
+
+  // If you pass a city or lat/lon, adapt here. Keeping your existing behavior:
+  if (near && near.trim()) {
+    params.set('near', near.trim());
   }
-  return { TEAM_ID, KEY_ID, PRIVATE_KEY };
+
+  const url = `${MAPS_API_BASE}/v1/search?${params.toString()}`;
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      // MapKit Server API requires a Bearer token
+      // https://developer.apple.com/documentation/applemapsserverapi/
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    // Bubble up a detailed error so your API route can turn it into 502
+    throw new Error(`[Apple /v1/search error] ${res.status} ${text}`);
+  }
+
+  return res.json();
 }
-
-export function makeServerToken(): string {
-  const { TEAM_ID, KEY_ID, PRIVATE_KEY } = getAppleCreds();
-  const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + 60 * 20;
-
-  return sign(
-    { iss: TEAM_ID, iat, exp, origin: allowedOrigins().join(",") },
-    PRIVATE_KEY,
-    { algorithm: "ES256", keyid: KEY_ID }
-  );
-}
-
-// Keep existing name used by /app/api/places/route.ts
-export function getAccessToken(): string { return makeServerToken(); }
-
-// Default export if any caller used it
-export default makeServerToken;
 

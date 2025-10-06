@@ -1,10 +1,13 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 // Ensure no caching of this API (helps avoid "stuck loading" on data changes).
-export const dynamic = "force-dynamic"; // next docs: caching config & force-dynamic. :contentReference[oaicite:0]{index=0}
+//export const dynamic = "force-dynamic"; // next docs: caching config & force-dynamic. :contentReference[oaicite:0]{index=0}
 
 type ProviderSnapshot = {
   id: string;

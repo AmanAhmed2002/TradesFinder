@@ -1,5 +1,7 @@
 // app/api/_mint-auth-token/route.ts
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

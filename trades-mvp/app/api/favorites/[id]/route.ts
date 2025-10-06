@@ -1,5 +1,6 @@
 // app/api/favorites/[id]/route.ts  (POST create, DELETE remove)
 export const runtime = "nodejs";
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";

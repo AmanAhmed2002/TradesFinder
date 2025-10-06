@@ -1,9 +1,7 @@
 // lib/mapkitToken.ts
 import { SignJWT, importPKCS8 } from 'jose';
 
-/**
- * Normalizes PEM that may be stored with \n escapes in env.
- */
+/** Normalize PEM that may be stored with \n escapes in env vars */
 function normalizePem(pem: string) {
   return pem.includes('\\n') ? pem.replace(/\\n/g, '\n') : pem;
 }
@@ -17,16 +15,14 @@ if (!KEY_ID) throw new Error('Missing MAPKIT_KEY_ID');
 if (!RAW_PEM) throw new Error('Missing MAPKIT_PRIVATE_KEY');
 
 async function importKeyES256() {
-  // Apple MapKit requires ES256 (EC P-256)
-  // jose.importPKCS8 expects full PKCS#8 PEM string
+  // Apple MapKit tokens must be ES256 (EC P-256). (Apple docs) :contentReference[oaicite:0]{index=0}
   const pem = normalizePem(RAW_PEM);
   return importPKCS8(pem, 'ES256');
 }
 
 /**
- * Create a short-lived token for MapKit **JS** usage.
- * We include an origin restriction (recommended) using a comma-separated string.
- * Note: Apple sources/documentation show ES256 and optional origin restriction.
+ * Token for MapKit **JS** usage (front-end). Includes origin restriction.
+ * Claims required: iss (team id), iat, exp; optional origin restriction (Apple docs). :contentReference[oaicite:1]{index=1}
  */
 export async function createJsMapsToken(): Promise<string> {
   const allowed = (process.env.MAPKIT_ALLOWED_ORIGINS || '')
@@ -41,8 +37,7 @@ export async function createJsMapsToken(): Promise<string> {
   const privateKey = await importKeyES256();
   const now = Math.floor(Date.now() / 1000);
 
-  // Per Apple guidance: ES256 + iss/teamId; origin restriction recommended for JS
-  // Many implementations use a single "origin" claim with comma-separated origins.
+  // Many implementations use a single "origin" claim (comma-separated).
   const token = await new SignJWT({ origin: allowed.join(',') })
     .setProtectedHeader({ alg: 'ES256', kid: KEY_ID, typ: 'JWT' })
     .setIssuer(TEAM_ID)
@@ -54,8 +49,7 @@ export async function createJsMapsToken(): Promise<string> {
 }
 
 /**
- * Create a token for **server-to-server** Maps Server API calls.
- * No origin restriction needed here.
+ * Token for **Apple Maps Server API** (backend). No origin restriction; send as Bearer auth. :contentReference[oaicite:2]{index=2}
  */
 export async function createServerMapsToken(): Promise<string> {
   const privateKey = await importKeyES256();
@@ -70,4 +64,8 @@ export async function createServerMapsToken(): Promise<string> {
 
   return token;
 }
+
+/* ---- Back-compat aliases so existing imports keep working ---- */
+export const makeServerToken = createServerMapsToken;
+export const makeJsToken = createJsMapsToken;
 

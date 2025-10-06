@@ -1,45 +1,47 @@
-// lib/mapsAccess.ts  (FULL FILE — replace)
-import jwt from "jsonwebtoken";
+// lib/mapsAccess.ts
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { sign } from "jsonwebtoken";
 
-let cached: { token: string; exp: number } | null = null;
+// Support either env naming you may have used elsewhere
+const TEAM_ID = process.env.MAPKIT_TEAM_ID || process.env.APPLE_TEAM_ID;
+const KEY_ID = process.env.MAPKIT_KEY_ID || process.env.APPLE_MAPKIT_KEY_ID;
+const PRIVATE_KEY_PATH = process.env.MAPKIT_PRIVATE_KEY_PATH || "keys/AuthKey_MapKit.p8";
 
-function signDeveloperToken() {
-  const teamId = process.env.MAPKIT_TEAM_ID!;
-  const keyId = process.env.MAPKIT_KEY_ID!;
-  let pem = process.env.MAPKIT_PRIVATE_KEY!;
-  pem = pem.replace(/\\n/g, "\n");
+// Comma-separated list of allowed origins (keep localhost + Vercel + any custom domains)
+const ORIGINS = (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+// Load the PEM once
+const PRIVATE_KEY = readFileSync(resolve(process.cwd(), PRIVATE_KEY_PATH), "utf8");
+
+/**
+ * Mint a short-lived MapKit JS token (ES256).
+ * Required claims: iss, iat, exp. Recommended: origin (CSV for multiple sites).
+ * jsonwebtoken sets header.alg and header.kid from the options, so no custom header is needed.
+ */
+export function makeServerToken(): string {
+  if (!TEAM_ID || !KEY_ID) throw new Error("Missing MAPKIT_TEAM_ID/KEY_ID envs.");
 
   const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + 5 * 60; // 5 minutes
+  const exp = iat + 60 * 20; // 20 minutes
 
-  return jwt.sign({ iss: teamId, iat, exp }, pem, {
+  const payload = {
+    iss: TEAM_ID,
+    iat,
+    exp,
+    origin: ORIGINS.join(","), // multiple origins via CSV
+  };
+
+  // DO NOT pass a custom `header` — it triggers TS overload issues and is unnecessary.
+  return sign(payload, PRIVATE_KEY, {
     algorithm: "ES256",
-    keyid: keyId,
-    header: { typ: "JWT" },
+    keyid: KEY_ID,
   });
 }
 
-export async function getAccessToken(): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  if (cached && cached.exp - 60 > now) return cached.token;
-
-  const authToken = signDeveloperToken();
-
-  const rsp = await fetch("https://maps-api.apple.com/v1/token", {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
-  if (!rsp.ok) {
-    const text = await rsp.text();
-    throw new Error(`/v1/token ${rsp.status}: ${text}`);
-  }
-
-  const json = await rsp.json();
-  const accessToken = json?.accessToken as string;
-  if (!accessToken) throw new Error("No accessToken in /v1/token response");
-
-  // Cache ~25 minutes (Apple’s lifetime ≈ 30m)
-  const exp = now + 25 * 60;
-  cached = { token: accessToken, exp };
-  return accessToken;
-}
+// Keep a default export if other files import it that way
+export default makeServerToken;
 

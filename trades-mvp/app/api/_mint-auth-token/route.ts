@@ -3,12 +3,13 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { sign } from "jsonwebtoken"; // ✅ avoids default-import typing issues
+import { sign } from "jsonwebtoken"; // named import plays nice with @types/jsonwebtoken
 
-const TEAM_ID = process.env.MAPKIT_TEAM_ID!;          // your Apple Team ID
-const KEY_ID = process.env.MAPKIT_KEY_ID!;            // your MapKit key ID
+const TEAM_ID = process.env.MAPKIT_TEAM_ID!;           // Apple Team ID
+const KEY_ID = process.env.MAPKIT_KEY_ID!;             // MapKit Key ID
 const PRIVATE_KEY_PATH = process.env.MAPKIT_PRIVATE_KEY_PATH || "keys/AuthKey_MapKit.p8";
-const ALLOWED = (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
+
+const ALLOWED_ORIGINS = (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
   .split(",")
   .map(s => s.trim())
   .filter(Boolean);
@@ -16,7 +17,7 @@ const ALLOWED = (process.env.MAPKIT_ALLOWED_ORIGINS || "http://localhost:3000")
 const PRIVATE_KEY = readFileSync(resolve(process.cwd(), PRIVATE_KEY_PATH), "utf8");
 
 function isAllowed(origin: string | null) {
-  return !!origin && ALLOWED.includes(origin);
+  return !!origin && ALLOWED_ORIGINS.includes(origin);
 }
 
 export async function GET(req: Request) {
@@ -29,9 +30,9 @@ export async function GET(req: Request) {
     const now = Math.floor(Date.now() / 1000);
     const exp = now + 60 * 20; // 20 minutes
 
-    // Apple MapKit JS token; include all allowed origins in the claim
+    // MapKit JS token: ES256, includes origin restriction for security
     const token = sign(
-      { iss: TEAM_ID, iat: now, exp, origin: ALLOWED.join(",") },
+      { iss: TEAM_ID, iat: now, exp, origin: ALLOWED_ORIGINS.join(",") },
       PRIVATE_KEY,
       { algorithm: "ES256", keyid: KEY_ID }
     );
